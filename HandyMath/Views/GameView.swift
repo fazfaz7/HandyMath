@@ -2,38 +2,57 @@ import SwiftUI
 import AVFoundation
 import Vision
 
+
+// Game view where users solve math problems with their fingers.
 struct GameView: View {
     
+    // Current math problem shown to the user.
     @State private var currentProblem: String = ""
+    
+    // Correct answer to the current problem.
     @State private var correctAnswer: Int = 0
+    
+    // Player's current score
     @State private var score: Int = 0
+    
+    // Questions answered so far
     @State private var questionCount: Int = 0
+    
+    // Bool to show the game over screen.
     @State private var gameCompleted: Bool = false
+    
+    // Bool that states if the answer has already been submitted.
     @State private var answerSubmitted: Bool = false
+    
+    // Bool that controls the feedback (correct or wrong)
     @State private var showFeedback: Bool = false
+    
+    // Bool to save if last answer was correct.
     @State private var isAnswerCorrect: Bool = false
 
-    // Finger stability tracking
+    // Tracks the last "stable" number of fingers detected.
     @State private var lastDetectedFingers: Int = 0
+    
+    // Tracks at that time did the last stable detection start.
     @State private var stableStartDate: Date? = nil
+    
+    // Value between 0.0 and 1.0 that represents the progress of stability.
     @State private var progress: CGFloat = 0.0
 
-    // Hand-pose bindings
-    @State private var handPoseInfo: String = "Show your answer!"
+    // All the detected joint points in the hand
     @State private var handPoints: [CGPoint] = []
+    
+    // Number of fingers that are currently detected as "up"
     @State private var fingersUp: Int = 0
 
-    // Timer for polling stability
+    // Timer that checks every 0.1s if the hand is stable enough
     private let stabilityTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
-            
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
 
+            // Live camera preview and hand tracking.
             ScannerView(
-                handPoseInfo: $handPoseInfo,
                 handPoints: $handPoints,
                 fingersUp: $fingersUp
             )
@@ -42,9 +61,10 @@ struct GameView: View {
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
 
+            // Main game interface
             VStack {
+                // If the game is completed, show the result of the user.
                 if gameCompleted {
-                    // Completion screen
                     VStack(spacing: 20) {
                         Text("Game Over!")
                             .font(.largeTitle)
@@ -82,7 +102,7 @@ struct GameView: View {
 
                         Spacer()
 
-                        // Locking circle showing stability progress
+                        // Circle that fills up when the finger count is stable
                         LockingCircleView(
                             number: answerSubmitted ? lastDetectedFingers : fingersUp,
                             isLocking: !answerSubmitted,
@@ -92,7 +112,7 @@ struct GameView: View {
                     }
                 }
 
-                // Feedback overlay
+                // Feedback when the user submits an answer.
                 if showFeedback {
                     VStack(spacing: 16) {
                         Image(systemName: isAnswerCorrect ? "checkmark.circle.fill" : "xmark.circle.fill")
@@ -114,39 +134,43 @@ struct GameView: View {
         }
     }
 
+    // Function called every 0.1s to check if the user is holding a number steadily
     private func handleStabilityTick() {
         let detected = fingersUp
         if detected != lastDetectedFingers {
-            // Reset stability tracking
+            // If the user changed the number we reset the timer
             lastDetectedFingers = detected
             stableStartDate = Date()
             progress = 0
         } else if detected > 0, let start = stableStartDate {
-            // Update progress
+            // Keep updating progress
             let elapsed = Date().timeIntervalSince(start)
             progress = min(1.0, CGFloat(elapsed / 2.0))
-            // If stable long enough, submit
+            // After 2 seconds of having the same answer → we submit it.
             if elapsed >= 2.0 {
                 submitAnswer()
             }
         } else {
-            // No finger or reset
+            // If there are no hands detected, reset.
             progress = 0
             stableStartDate = nil
         }
     }
 
+    // Submits the current answer and shows feedback
     private func submitAnswer() {
         answerSubmitted = true
         showFeedback = true
         isAnswerCorrect = (lastDetectedFingers == correctAnswer)
+        
+        // If the answer is correct, we play the corresponding sound.
         if isAnswerCorrect {
             SoundManager.shared.playSound(named: "correct")
             score += 1
         } else {
             SoundManager.shared.playSound(named: "incorrect")
         }
-        // After 2 seconds, advance
+        // After 2 seconds, we go to the next question.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             showFeedback = false
             answerSubmitted = false
@@ -162,6 +186,7 @@ struct GameView: View {
         }
     }
 
+    // Resets the game to the initial state
     private func resetGame() {
         score = 0
         questionCount = 0
@@ -174,7 +199,7 @@ struct GameView: View {
         loadNextQuestion()
     }
 
-    /// Generates a new + or - question with result constrained between 1 and 5
+    // Generates a random sum or subtraction question with result constrained between 1 and 5
        private func loadNextQuestion() {
            var a: Int = 0, b: Int = 0, result: Int = 0, op: String = "+"
            repeat {
@@ -198,6 +223,7 @@ struct GameView: View {
    
 }
 
+// Circular progress view that locks the answer when stable. (2 seconds)
 struct LockingCircleView: View {
     let number: Int
     let isLocking: Bool
@@ -205,14 +231,14 @@ struct LockingCircleView: View {
 
     var body: some View {
         ZStack {
-            // Outer progress ring
+            // Outer ring showing progress as a circle
             Circle()
                 .trim(from: 0, to: isLocking ? progress : 1)
                 .stroke(.goldenyellow, style: StrokeStyle(lineWidth: 7, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .frame(width: 125, height: 125)
 
-            // Inner number badge
+            // Number displayed in the center
             Text("\(number)")
                 .font(.system(size: 72, weight: .bold))
                 .foregroundColor(.white)

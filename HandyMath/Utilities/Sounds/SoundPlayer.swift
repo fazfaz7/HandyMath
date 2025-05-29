@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 
+// Sound Manager to play correct and incorrect sounds.
 class SoundManager {
     static let shared = SoundManager()
 

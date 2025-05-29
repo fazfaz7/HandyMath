@@ -4,10 +4,13 @@ import Vision
 
 struct ScannerView: UIViewControllerRepresentable {
     
-    @Binding var handPoseInfo: String
+    // All the detected joint points in the hand
     @Binding var handPoints: [CGPoint]
+    
+    // How many fingers are detected as up.
     @Binding var fingersUp: Int
     
+    // Management of the camera for live detection.
     let captureSession = AVCaptureSession()
     
     func makeUIViewController(context: Context) -> UIViewController {
@@ -54,6 +57,7 @@ struct ScannerView: UIViewControllerRepresentable {
             self.parent = parent
         }
 
+        // It is called every time that a new camera frame is available
         func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
                 return
@@ -61,11 +65,11 @@ struct ScannerView: UIViewControllerRepresentable {
             self.detectHandPose(in: pixelBuffer)
         }
 
+        // Function that uses Vision Framework to detect hand joints
         func detectHandPose(in pixelBuffer: CVPixelBuffer) {
             let request = VNDetectHumanHandPoseRequest { (request, error) in
                 guard let observations = request.results as? [VNHumanHandPoseObservation], !observations.isEmpty else {
                     DispatchQueue.main.async {
-                        self.parent.handPoseInfo = "No hand detected"
                         self.parent.handPoints = []
                         self.parent.fingersUp = 0
                     }
@@ -77,7 +81,7 @@ struct ScannerView: UIViewControllerRepresentable {
                     var fingerTips: [CGPoint] = []
                     var mcpPoints: [CGPoint] = []
                     
-                    // Get all joints
+                    // List of joints to track
                     let allJoints: [VNHumanHandPoseObservation.JointName] = [
                         .wrist,
                         .thumbCMC, .thumbMP, .thumbIP, .thumbTip,
@@ -87,9 +91,9 @@ struct ScannerView: UIViewControllerRepresentable {
                         .littleMCP, .littlePIP, .littleDIP, .littleTip
                     ]
                     
-                    // Store points for all joints
+                    // Convert Vision points to screen coordinates and collect them
                     for joint in allJoints {
-                        if let recognizedPoint = try? observation.recognizedPoint(joint), recognizedPoint.confidence > 0.5 {
+                        if let recognizedPoint = try? observation.recognizedPoint(joint), recognizedPoint.confidence > 0.65 {
                             let convertedPoint = self.convertVisionPoint(recognizedPoint.location)
                             points.append(convertedPoint)
                             
@@ -112,12 +116,11 @@ struct ScannerView: UIViewControllerRepresentable {
                     DispatchQueue.main.async {
                         self.parent.handPoints = points
                         self.parent.fingersUp = fingersCount
-                        self.parent.handPoseInfo = "\(fingersCount) finger(s) up"
                     }
                 }
             }
 
-            request.maximumHandCount = 1
+            request.maximumHandCount = 1 // Only detect one hand
 
             let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
             do {
@@ -135,7 +138,7 @@ struct ScannerView: UIViewControllerRepresentable {
             
             var count = 0
             
-            // Check each finger (skip thumb as it's handled differently)
+            // For fingers 1 to 4 (index to little), a finger is up if the tip is higher (y is smaller) than its MCP
             for i in 1..<5 {
                 // A finger is considered "up" if its tip is above its MCP joint
                 if fingerTips[i].y < mcpPoints[i].y {
@@ -144,14 +147,13 @@ struct ScannerView: UIViewControllerRepresentable {
             }
             
             // Special handling for thumb - check if it's extended to the side
-            
             if fingerTips[0].x > fingerTips[4].x {
                 let thumbExtended = fingerTips[0].x > mcpPoints[0].x
                 if thumbExtended {
                     count += 1
                 }
-                print("hola")
             } else {
+                // if the hand is left
                 let thumbExtended = fingerTips[0].x < mcpPoints[0].x
                 if thumbExtended {
                     count += 1
@@ -162,6 +164,7 @@ struct ScannerView: UIViewControllerRepresentable {
             return count
         }
 
+        // Converts a Vision point (normalized 0-1) to screen coordinates
         func convertVisionPoint(_ point: CGPoint) -> CGPoint {
             let screenSize = UIScreen.main.bounds.size
             let y = point.x * screenSize.height
