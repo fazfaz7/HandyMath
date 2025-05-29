@@ -81,7 +81,7 @@ struct ScannerView: UIViewControllerRepresentable {
                     var fingerTips: [CGPoint] = []
                     var mcpPoints: [CGPoint] = []
                     
-                    // List of joints to track
+                    // The joints that are tracked (but I am only using the tips and the mcps.R
                     let allJoints: [VNHumanHandPoseObservation.JointName] = [
                         .wrist,
                         .thumbCMC, .thumbMP, .thumbIP, .thumbTip,
@@ -120,7 +120,7 @@ struct ScannerView: UIViewControllerRepresentable {
                 }
             }
 
-            request.maximumHandCount = 1 // Only detect one hand
+            request.maximumHandCount = 1 // We only detect on hand at a time.
 
             let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
             do {
